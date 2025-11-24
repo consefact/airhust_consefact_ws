@@ -50,6 +50,7 @@ void local_pos_cb(const nav_msgs::Odometry::ConstPtr &msg);
 void local_pos_cb(const nav_msgs::Odometry::ConstPtr &msg)
 {
 	local_pos = *msg;
+	//四元数到欧拉角转换
 	tf::quaternionMsgToTF(local_pos.pose.pose.orientation, quat);
 	tf::Matrix3x3(quat).getRPY(roll, pitch, yaw);
 	if (flag_init_position == false && (local_pos.pose.pose.position.z != 0))
@@ -80,12 +81,7 @@ bool mission_pos_cruise(float x, float y, float z, float target_yaw, float error
 		mission_pos_cruise_last_position_y = local_pos.pose.pose.position.y;
 		mission_pos_cruise_flag = true;
 	}
-	setpoint_raw.type_mask = /*1 + 2 + 4 */ +8 + 16 + 32 + 64 + 128 + 256 + 512 /*+ 1024 */ + 2048;
-	setpoint_raw.coordinate_frame = 1;
-	setpoint_raw.position.x = x + init_position_x_take_off;
-	setpoint_raw.position.y = y + init_position_y_take_off;
-	setpoint_raw.position.z = z + init_position_z_take_off;
-	setpoint_raw.yaw = target_yaw;
+	
 	ROS_INFO("now (%.2f,%.2f,%.2f,%.2f) to ( %.2f, %.2f, %.2f, %.2f)", local_pos.pose.pose.position.x ,local_pos.pose.pose.position.y, local_pos.pose.pose.position.z, target_yaw * 180.0 / M_PI, x + init_position_x_take_off, y + init_position_y_take_off, z + init_position_z_take_off, target_yaw * 180.0 / M_PI );
 	if (fabs(local_pos.pose.pose.position.x - x - init_position_x_take_off) < error_max && fabs(local_pos.pose.pose.position.y - y - init_position_y_take_off) < error_max && fabs(local_pos.pose.pose.position.z - z - init_position_z_take_off) < error_max && fabs(yaw - target_yaw) < 0.1)
 	{
