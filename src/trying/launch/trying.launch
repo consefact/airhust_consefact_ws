@@ -1,0 +1,4 @@
+<launch>
+  <node pkg="trying" type="trying" name="" output="screen" />
+  <rosparam command="load" file="$(find trying)/config/trying.yaml" />
+</launch>

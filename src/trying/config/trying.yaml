@@ -2,6 +2,11 @@ err_max : 0.15
 if_debug : 1
 
 ## for colision_avoidance
+##目标位置
+target_x_mission_2 : 8
+target_y_mission_2 : 2
+target_yaw : 0
+
 ##追踪部分位置环P
 p_xy : 1.4
 

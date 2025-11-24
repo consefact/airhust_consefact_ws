@@ -6,7 +6,7 @@ int mission_num = 0;
 float if_debug = 0;
 float err_max = 0.2;
 float target_x_mission_2 = 8;                                                 //期望位置_x
-float target_y_mission_2 = 0;                                                 //期望位置_y
+float target_y_mission_2 = -2;                                                 //期望位置_y
 float target_yaw = 0;
 
 void print_param()
@@ -26,7 +26,7 @@ int main(int argc, char **argv)
   setlocale(LC_ALL, "");
 
   // 初始化ROS节点
-  ros::init(argc, argv, "template");
+  ros::init(argc, argv, "trying");
   ros::NodeHandle nh;
 
   // 订阅mavros相关话题
@@ -51,6 +51,9 @@ int main(int argc, char **argv)
   nh.param<float>("err_max", err_max, 0);
   nh.param<float>("if_debug", if_debug, 0);
 
+  nh.param<float>("target_x_mission", target_x_mission_2,8);
+  nh.param<float>("target_y_mission", target_y_mission_2,-2);
+  nh.param<float>("target_yaw", target_yaw,0);
 
   nh.param<float>("R_outside", R_outside, 2);
   nh.param<float>("R_inside", R_inside, 1);
@@ -67,6 +70,7 @@ int main(int argc, char **argv)
 
   nh.param<int>("range_min", range_min, 0.0);
   nh.param<int>("range_max", range_max, 0.0);
+
   print_param();
 
   
@@ -221,6 +225,7 @@ int main(int argc, char **argv)
           setpoint_raw.velocity.y =  vel_sp_ENU[1];  //ENU frame
           setpoint_raw.position.z =  ALTITUDE;
           setpoint_raw.yaw = 0 ;
+          mavros_setpoint_pos_pub.publish(setpoint_raw);
 
           // float abs_distance;
           // abs_distance = sqrt((pos_drone.pose.position.x - target_x) * (pos_drone.pose.position.x - target_x) + (pos_drone.pose.position.y - target_y) * (pos_drone.pose.position.y - target_y));
@@ -238,6 +243,7 @@ int main(int argc, char **argv)
           {
             ROS_INFO("到达目标点，巡航点任务完成");
             mission_num = 100;
+            break;
           }
         }
         break;
