@@ -7,6 +7,8 @@ float if_debug = 0;
 float err_max = 0.2;
 float target_x_mission_2 = 8;                                                 //期望位置_x
 float target_y_mission_2 = -2;                                                 //期望位置_y
+float target_x_mission_3 = 15;
+float target_y_mission_3 = 0.5;
 float target_yaw = 0;
 
 void print_param()
@@ -51,8 +53,8 @@ int main(int argc, char **argv)
   nh.param<float>("err_max", err_max, 0);
   nh.param<float>("if_debug", if_debug, 0);
 
-  nh.param<float>("target_x_mission", target_x_mission_2,8);
-  nh.param<float>("target_y_mission", target_y_mission_2,-2);
+  nh.param<float>("target_x_mission2", target_x_mission_2,8);
+  nh.param<float>("target_y_mission2", target_y_mission_2,-2);
   nh.param<float>("target_yaw", target_yaw,0);
 
   nh.param<float>("R_outside", R_outside, 2);
@@ -240,6 +242,56 @@ int main(int argc, char **argv)
           printf();
           rate.sleep();
           if (fabs(local_pos.pose.pose.position.x - target_x_mission_2 - init_position_x_take_off) < err_max && fabs(local_pos.pose.pose.position.y - target_y_mission_2 - init_position_y_take_off) < err_max && fabs(local_pos.pose.pose.position.z - ALTITUDE - init_position_z_take_off) < err_max && fabs(yaw - target_yaw) < 0.1)
+          {
+            ROS_INFO("到达目标点，巡航点任务完成");
+            mission_num = 3;
+            break;
+          }
+        }
+        break;
+      case 3:
+        printf_param();
+        vel_track[0]= 0;
+        vel_track[1]= 0;
+
+        vel_collision[0]= 0;
+        vel_collision[1]= 0;
+
+        vel_sp_body[0]= 0;
+        vel_sp_body[1]= 0;
+
+        vel_sp_ENU[0]= 0;
+        vel_sp_ENU[1]= 0;
+        
+
+        while (ros::ok())
+        { 
+          ROS_INFO("now (%.2f,%.2f,%.2f,%.2f) to ( %.2f, %.2f, %.2f, %.2f)", local_pos.pose.pose.position.x ,local_pos.pose.pose.position.y, local_pos.pose.pose.position.z, target_yaw * 180.0 / M_PI, target_x_mission_3 + init_position_x_take_off, target_x_mission_3 + init_position_y_take_off, ALTITUDE + init_position_z_take_off, target_yaw * 180.0 / M_PI );
+          //回调一次 更新传感器状态
+          //1. 更新雷达点云数据，存储在Laser中,并计算四向最小距离
+          ros::spinOnce();
+          collision_avoidance(target_x_mission_3,target_x_mission_3);
+          
+          setpoint_raw.type_mask = 1 + 2 /*+ 4 + 8 + 16 */+ 32 +64 + 128 + 256 + 512 /*+ 1024 + 2048*/; // xy 速度控制模式 z 位置控制模式  //
+          setpoint_raw.velocity.x =  vel_sp_ENU[0];
+          setpoint_raw.velocity.y =  vel_sp_ENU[1];  //ENU frame
+          setpoint_raw.position.z =  ALTITUDE;
+          setpoint_raw.yaw = 0 ;
+          mavros_setpoint_pos_pub.publish(setpoint_raw);
+
+          // float abs_distance;
+          // abs_distance = sqrt((pos_drone.pose.position.x - target_x) * (pos_drone.pose.position.x - target_x) + (pos_drone.pose.position.y - target_y) * (pos_drone.pose.position.y - target_y));
+          // if(abs_distance < 0.3 || flag_land == 1)
+          // {
+          //     Command_now.command = 3;     //Land
+          //     flag_land = 1;
+          // }
+          // if(flag_land == 1) Command_now.command = Land;
+          // command_pub.publish(Command_now);
+          // //打印
+          printf();
+          rate.sleep();
+          if (fabs(local_pos.pose.pose.position.x - target_x_mission_3 - init_position_x_take_off) < err_max && fabs(local_pos.pose.pose.position.y - target_x_mission_3 - init_position_y_take_off) < err_max && fabs(local_pos.pose.pose.position.z - ALTITUDE - init_position_z_take_off) < err_max && fabs(yaw - target_yaw) < 0.1)
           {
             ROS_INFO("到达目标点，巡航点任务完成");
             mission_num = 100;
