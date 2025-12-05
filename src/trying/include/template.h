@@ -81,7 +81,12 @@ bool mission_pos_cruise(float x, float y, float z, float target_yaw, float error
 		mission_pos_cruise_last_position_y = local_pos.pose.pose.position.y;
 		mission_pos_cruise_flag = true;
 	}
-	
+	setpoint_raw.type_mask = /*1 + 2 + 4 */ +8 + 16 + 32 + 64 + 128 + 256 + 512 /*+ 1024 */ + 2048;
+	setpoint_raw.coordinate_frame = 1;
+	setpoint_raw.position.x = x + init_position_x_take_off;
+	setpoint_raw.position.y = y + init_position_y_take_off;
+	setpoint_raw.position.z = z + init_position_z_take_off;
+	setpoint_raw.yaw = target_yaw;
 	ROS_INFO("now (%.2f,%.2f,%.2f,%.2f) to ( %.2f, %.2f, %.2f, %.2f)", local_pos.pose.pose.position.x ,local_pos.pose.pose.position.y, local_pos.pose.pose.position.z, target_yaw * 180.0 / M_PI, x + init_position_x_take_off, y + init_position_y_take_off, z + init_position_z_take_off, target_yaw * 180.0 / M_PI );
 	if (fabs(local_pos.pose.pose.position.x - x - init_position_x_take_off) < error_max && fabs(local_pos.pose.pose.position.y - y - init_position_y_take_off) < error_max && fabs(local_pos.pose.pose.position.z - z - init_position_z_take_off) < error_max && fabs(yaw - target_yaw) < 0.1)
 	{
@@ -91,6 +96,103 @@ bool mission_pos_cruise(float x, float y, float z, float target_yaw, float error
 	}
 	return false;
 }
+
+//  add func 
+//  control by vel to setpoint in line
+bool control_by_vel(float vel_x, float vel_y, float x, float y, float z, float target_yaw, float error_max);
+bool control_by_vel(float vel_x, float vel_y, float x, float y, float z, float target_yaw, float error_max){
+	float vel_x_add = 0, vel_y_add = 0;
+	if(vel_x == 0){
+		if(fabs(local_pos.pose.pose.position.x - x -init_position_x_take_off)> error_max){
+			if(local_pos.pose.pose.position.x - x -init_position_x_take_off > 0){
+				vel_x_add = -0.35;
+			}
+			else{
+				vel_x_add = 0.35;
+			}
+		}
+		else vel_x_add = 0.0;
+	}
+	else{
+		if(fabs(local_pos.pose.pose.position.y - y -init_position_y_take_off)> error_max){
+			if(local_pos.pose.pose.position.y - y -init_position_y_take_off > 0){
+				vel_y_add = -0.35;
+			}
+			else{
+				vel_y_add = 0.35;
+			}
+		}
+		else vel_y_add = 0.0;
+	}
+	setpoint_raw.type_mask = 1 + 2 +/* 4 + 8 + 16 +*/ 32 + 64 + 128 + 256 + 512 /*+ 1024 */ + 2048;
+	setpoint_raw.coordinate_frame = 1;
+	setpoint_raw.velocity.x = vel_x + vel_x_add;
+	setpoint_raw.velocity.y = vel_y + vel_y_add;
+	setpoint_raw.position.z = z + init_position_z_take_off;
+	setpoint_raw.yaw = target_yaw;
+	ROS_INFO("now (%.2f,%.2f,%.2f,%.2f) to ( %.2f, %.2f, %.2f, %.2f)", local_pos.pose.pose.position.x ,local_pos.pose.pose.position.y, local_pos.pose.pose.position.z, target_yaw * 180.0 / M_PI, x + init_position_x_take_off, y + init_position_y_take_off, z + init_position_z_take_off, target_yaw * 180.0 / M_PI );
+	if(fabs(local_pos.pose.pose.position.x - x - init_position_x_take_off) < error_max && fabs(local_pos.pose.pose.position.y - y - init_position_y_take_off) < error_max && fabs(local_pos.pose.pose.position.z - z - init_position_z_take_off) < error_max && fabs(yaw - target_yaw) < 0.1){
+		ROS_INFO("到达目标点");
+		return true;
+	}
+	return false;
+}
+
+// add func
+// traverse a region in set vel
+bool traverse_region_flag = true;
+int traver_mod = 0,traver_count = 0;
+float y_add = 0;
+bool traverse_region(float length, float width, float init_x, float init_y, float z, float vel, float target_yaw, int times, float error_max);
+bool traverse_region(float length, float width, float init_x, float init_y, float z, float vel, float target_yaw, int times, float error_max){
+	float x = 0, y = 0, vel_x = 0, vel_y = 0 ;
+	switch (traver_mod){
+		case 0:
+			x = init_x + length;
+			y = init_y + y_add;
+			vel_x = vel;
+			vel_y = 0;
+			break;
+		case 1:
+			if(traverse_region_flag){
+				y_add += width/(times*2);
+				traverse_region_flag = false;
+			}
+			x = init_x + length;
+			y = init_y + y_add;
+			vel_x = 0;
+			vel_y = vel;
+			break;
+		case 2:
+			x = init_x;
+			y = init_y + y_add;
+			vel_x = -vel;
+			vel_y = 0;
+			break;
+		case 3:
+			if(traverse_region_flag){
+				y_add += width/(times*2);
+				traverse_region_flag = false;
+			} 
+			x = init_x;
+			y = init_y + y_add;
+			vel_x = 0;
+			vel_y = vel;
+			break;
+	}
+	if(control_by_vel(vel_x, vel_y, x, y, z, target_yaw, error_max)){
+		traver_count++;
+		traver_mod++;
+		traver_mod %= 4;
+		traverse_region_flag = true;
+
+	}
+	if(traver_count/4.0 > times){
+		return true;
+	}
+	return false;
+}
+
 
 /************************************************************************
 函数 4:降落

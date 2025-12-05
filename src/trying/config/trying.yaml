@@ -4,7 +4,7 @@ if_debug : 1
 ## for colision_avoidance
 ##目标位置
 target_x_mission_2 : 8
-target_y_mission_2 : 1
+target_y_mission_2 : -2
 target_x_mission_3 : 15
 target_y_mission_3 : 0.5
 target_yaw : 0

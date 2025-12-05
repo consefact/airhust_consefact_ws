@@ -1,5 +1,6 @@
 #include <template.h>
 #include <collision_avoidance.h>
+#include <darknet_control.h>
 
 // 全局变量定义
 int mission_num = 0;
@@ -10,6 +11,10 @@ float target_y_mission_2 = -2;                                                 /
 float target_x_mission_3 = 15;
 float target_y_mission_3 = 0.5;
 float target_yaw = 0;
+std_msgs::String output_msg;
+std::stringstream ss;
+enum TrackingState { SEARCHING, TRACKING, LOST };
+TrackingState tracking_state = SEARCHING;
 
 void print_param()
 {
@@ -36,10 +41,10 @@ int main(int argc, char **argv)
   ros::Subscriber local_pos_sub = nh.subscribe<nav_msgs::Odometry>("/mavros/local_position/odom", 10, local_pos_cb);
   ros::Subscriber lidar_sub = nh.subscribe<sensor_msgs::LaserScan>("/laser/scan", 1000, lidar_cb);//【订阅】Lidar数据
   ros::Subscriber position_sub = nh.subscribe<geometry_msgs::PoseStamped>("/mavros/local_position/pose", 100, pos_cb);//【订阅】无人机当前位置 坐标系 NED系
-
+  ros::Subscriber bbox_sub = nh.subscribe<darknet_ros_msgs::BoundingBoxes>("/darknet_ros/bounding_boxes", 10, bbox_cb);//
   // 发布无人机多维控制话题
   ros::Publisher mavros_setpoint_pos_pub = nh.advertise<mavros_msgs::PositionTarget>("/mavros/setpoint_raw/local", 100);
-
+  ros::Publisher objection_detect_pub = nh.advertise<std_msgs::String>("/target",10);
   // 创建服务客户端
   ros::ServiceClient arming_client = nh.serviceClient<mavros_msgs::CommandBool>("mavros/cmd/arming");
   ros::ServiceClient set_mode_client = nh.serviceClient<mavros_msgs::SetMode>("mavros/set_mode");
@@ -53,8 +58,8 @@ int main(int argc, char **argv)
   nh.param<float>("err_max", err_max, 0);
   nh.param<float>("if_debug", if_debug, 0);
 
-  nh.param<float>("target_x_mission2", target_x_mission_2,8);
-  nh.param<float>("target_y_mission2", target_y_mission_2,-2);
+  nh.param<float>("target_x_mission_2", target_x_mission_2,8);
+  nh.param<float>("target_y_mission_2", target_y_mission_2,1);
   nh.param<float>("target_yaw", target_yaw,0);
 
   nh.param<float>("R_outside", R_outside, 2);
@@ -191,15 +196,7 @@ int main(int argc, char **argv)
     ROS_WARN("mission_num = %d", mission_num);
     switch (mission_num)
     {
-      // //世界系前进
-      // case 2:
-      //   if (mission_pos_cruise(1.0, 0.0, ALTITUDE, 0.0 , err_max))
-      //   {
-      //     mission_num = 3;
-      //     last_request = ros::Time::now();
-      //   }
-      //   break;
-      case 2:
+      case 1:
         printf_param();
         vel_track[0]= 0;
         vel_track[1]= 0;
@@ -249,58 +246,132 @@ int main(int argc, char **argv)
           }
         }
         break;
-      case 3:
-        printf_param();
-        vel_track[0]= 0;
-        vel_track[1]= 0;
+        case 2:
+          if(control_by_vel(0.0, -1.5, 0.0, -3.0, ALTITUDE, target_yaw, err_max)){
+            ROS_INFO("到达目标点，巡航点任务完成");
+            mission_num = 4;
+          }
+          break;
+        case 4:
+          if(control_by_vel(1.5, 0.0, 24.0, -3.0, ALTITUDE, target_yaw, err_max)){
+            ROS_INFO("到达目标点，巡航点任务完成");
+            mission_num = 5;
+          }
+          break;
+        case 5:
+          if(control_by_vel(0.0, 0.4, 24.0, -1.2, ALTITUDE, target_yaw, err_max)){
+            ROS_INFO("到达目标点，巡航点任务完成");
+            mission_num = 6;
+          }
+          break;
+        case 6:
 
-        vel_collision[0]= 0;
-        vel_collision[1]= 0;
+            bool atRegionEnd = false; // 标记是否遍历到区域尽头
 
-        vel_sp_body[0]= 0;
-        vel_sp_body[1]= 0;
+            // 根据状态机执行不同行为
+            switch(tracking_state) {
+                case SEARCHING:
+                    // 状态1: 未发现目标，执行区域遍历搜索
+                    ROS_INFO_THROTTLE(2, "状态: 搜索中...");
+                    atRegionEnd = traverse_region(6.0, 4.4, 25.0, -1.2, ALTITUDE, 0.5, target_yaw, 3, err_max);
+                    
+                    if (objection_detect()) {
+                        ROS_INFO("发现目标，切换至跟踪状态！");
+                        tracking_state = TRACKING; // 发现目标，进入跟踪
+                    } else if (atRegionEnd) {
+                        ROS_WARN("已搜索完区域，未发现目标。任务结束。");
+                        mission_num = 100; // 区域遍历完成，结束任务
+                    }
+                    // 继续保持在 case 6 循环
+                    break;
 
-        vel_sp_ENU[0]= 0;
-        vel_sp_ENU[1]= 0;
+                case TRACKING:
+                    // 状态2: 已发现目标，尝试视觉对中
+                    ROS_INFO_THROTTLE(1, "状态: 跟踪对中中...");
+                    if (objection_detect()) {
+                        // 持续检测到目标，尝试对中
+                        if (move_to_center(error_x, error_y, ALTITUDE)) {
+                            // 对中成功！
+                            ss.str(""); // 清空字符串流
+                            ss << bbox_class_name << "," << local_pos.pose.pose.position.x << "," << local_pos.pose.pose.position.y;
+                            output_msg.data = ss.str();
+                            objection_detect_pub.publish(output_msg);
+                            ROS_INFO("对中完成，发布目标位置: %s", output_msg.data.c_str());
+                            mission_num = 100; // 进入结束任务
+                        }
+                        // 对中未完成，继续保持跟踪状态，循环会继续发布速度指令
+                    } else {
+                        // 目标丢失
+                        ROS_WARN("目标丢失，切换回搜索状态。");
+                        tracking_state = SEARCHING;
+                        // 可以在这里设置一个短暂的悬停或原地旋转，增加重新捕获的概率
+                        // setpoint_raw.type_mask = ... // 设置悬停指令
+                    }
+                    break;
+
+                case LOST:
+                    // 状态3: (可选) 目标丢失后的特殊处理，例如悬停或小范围旋转
+                    // 这里可以设计更复杂的行为，例如向最后看到的目标位置移动一小段
+                    // 简单实现: 短暂悬停后回到搜索
+                    ROS_INFO_THROTTLE(1, "状态: 目标丢失，处理中...");
+                    tracking_state = SEARCHING;
+                    break;
+            }
+      // case 3:
+      //   printf_param();
+      //   vel_track[0]= 0;
+      //   vel_track[1]= 0;
+
+      //   vel_collision[0]= 0;
+      //   vel_collision[1]= 0;
+
+      //   vel_sp_body[0]= 0;
+      //   vel_sp_body[1]= 0;
+
+      //   vel_sp_ENU[0]= 0;
+      //   vel_sp_ENU[1]= 0;
         
 
-        while (ros::ok())
-        { 
-          ROS_INFO("now (%.2f,%.2f,%.2f,%.2f) to ( %.2f, %.2f, %.2f, %.2f)", local_pos.pose.pose.position.x ,local_pos.pose.pose.position.y, local_pos.pose.pose.position.z, target_yaw * 180.0 / M_PI, target_x_mission_3 + init_position_x_take_off, target_x_mission_3 + init_position_y_take_off, ALTITUDE + init_position_z_take_off, target_yaw * 180.0 / M_PI );
-          //回调一次 更新传感器状态
-          //1. 更新雷达点云数据，存储在Laser中,并计算四向最小距离
-          ros::spinOnce();
-          collision_avoidance(target_x_mission_3,target_x_mission_3);
+      //   while (ros::ok())
+      //   { 
+      //     ROS_INFO("now (%.2f,%.2f,%.2f,%.2f) to ( %.2f, %.2f, %.2f, %.2f)", local_pos.pose.pose.position.x ,local_pos.pose.pose.position.y, local_pos.pose.pose.position.z, target_yaw * 180.0 / M_PI, target_x_mission_3 + init_position_x_take_off, target_x_mission_3 + init_position_y_take_off, ALTITUDE + init_position_z_take_off, target_yaw * 180.0 / M_PI );
+      //     //回调一次 更新传感器状态
+      //     //1. 更新雷达点云数据，存储在Laser中,并计算四向最小距离
+      //     ros::spinOnce();
+      //     collision_avoidance(target_x_mission_3,target_x_mission_3);
           
-          setpoint_raw.type_mask = 1 + 2 /*+ 4 + 8 + 16 */+ 32 +64 + 128 + 256 + 512 /*+ 1024 + 2048*/; // xy 速度控制模式 z 位置控制模式  //
-          setpoint_raw.velocity.x =  vel_sp_ENU[0];
-          setpoint_raw.velocity.y =  vel_sp_ENU[1];  //ENU frame
-          setpoint_raw.position.z =  ALTITUDE;
-          setpoint_raw.yaw = 0 ;
-          mavros_setpoint_pos_pub.publish(setpoint_raw);
+      //     setpoint_raw.type_mask = 1 + 2 /*+ 4 + 8 + 16 */+ 32 +64 + 128 + 256 + 512 /*+ 1024 + 2048*/; // xy 速度控制模式 z 位置控制模式  //
+      //     setpoint_raw.velocity.x =  vel_sp_ENU[0];
+      //     setpoint_raw.velocity.y =  vel_sp_ENU[1];  //ENU frame
+      //     setpoint_raw.position.z =  ALTITUDE;
+      //     setpoint_raw.yaw = 0 ;
+      //     mavros_setpoint_pos_pub.publish(setpoint_raw);
 
-          // float abs_distance;
-          // abs_distance = sqrt((pos_drone.pose.position.x - target_x) * (pos_drone.pose.position.x - target_x) + (pos_drone.pose.position.y - target_y) * (pos_drone.pose.position.y - target_y));
-          // if(abs_distance < 0.3 || flag_land == 1)
-          // {
-          //     Command_now.command = 3;     //Land
-          //     flag_land = 1;
-          // }
-          // if(flag_land == 1) Command_now.command = Land;
-          // command_pub.publish(Command_now);
-          // //打印
-          printf();
-          rate.sleep();
-          if (fabs(local_pos.pose.pose.position.x - target_x_mission_3 - init_position_x_take_off) < err_max && fabs(local_pos.pose.pose.position.y - target_x_mission_3 - init_position_y_take_off) < err_max && fabs(local_pos.pose.pose.position.z - ALTITUDE - init_position_z_take_off) < err_max && fabs(yaw - target_yaw) < 0.1)
-          {
-            ROS_INFO("到达目标点，巡航点任务完成");
-            mission_num = 100;
-            break;
-          }
-        }
-        break;
+      //     // float abs_distance;
+      //     // abs_distance = sqrt((pos_drone.pose.position.x - target_x) * (pos_drone.pose.position.x - target_x) + (pos_drone.pose.position.y - target_y) * (pos_drone.pose.position.y - target_y));
+      //     // if(abs_distance < 0.3 || flag_land == 1)
+      //     // {
+      //     //     Command_now.command = 3;     //Land
+      //     //     flag_land = 1;
+      //     // }
+      //     // if(flag_land == 1) Command_now.command = Land;
+      //     // command_pub.publish(Command_now);
+      //     // //打印
+      //     printf();
+      //     rate.sleep();
+      //     if (fabs(local_pos.pose.pose.position.x - target_x_mission_3 - init_position_x_take_off) < err_max && fabs(local_pos.pose.pose.position.y - target_x_mission_3 - init_position_y_take_off) < err_max && fabs(local_pos.pose.pose.position.z - ALTITUDE - init_position_z_take_off) < err_max && fabs(yaw - target_yaw) < 0.1)
+      //     {
+      //       ROS_INFO("到达目标点，巡航点任务完成");
+      //       mission_num = 100;
+      //       break;
+      //     }
+      //   }
+      //   break;
     }
+    mavros_setpoint_pos_pub.publish(setpoint_raw);
     if(mission_num == 100) break;
+    ros::spinOnce();
+    rate.sleep();
   }
 
   //land

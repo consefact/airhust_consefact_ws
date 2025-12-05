@@ -19,6 +19,7 @@ find_package(catkin REQUIRED COMPONENTS
   sensor_msgs
   geometry_msgs
   message_generation
+  darknet_ros_msgs
 )
 find_package(Eigen3 REQUIRED)
 
