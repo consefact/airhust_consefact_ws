@@ -276,7 +276,7 @@ int main(int argc, char **argv)
 
         while (ros::ok())
         { 
-          ROS_INFO("now (%.2f,%.2f,%.2f,%.2f) to ( %.2f, %.2f, %.2f, %.2f)", local_pos.pose.pose.position.x ,local_pos.pose.pose.position.y, local_pos.pose.pose.position.z, target_yaw * 180.0 / M_PI, target_x_mission_3 + init_position_x_take_off, target_x_mission_3 + init_position_y_take_off, ALTITUDE + init_position_z_take_off, target_yaw * 180.0 / M_PI );
+          ROS_INFO("now (%.2f,%.2f,%.2f,%.2f) to ( %.2f, %.2f, %.2f, %.2f)", local_pos.pose.pose.position.x ,local_pos.pose.pose.position.y, local_pos.pose.pose.position.z, target_yaw * 180.0 / M_PI, target_x_mission_3 + init_position_x_take_off, target_y_mission_3 + init_position_y_take_off, ALTITUDE + init_position_z_take_off, target_yaw * 180.0 / M_PI );
           //回调一次 更新传感器状态
           //1. 更新雷达点云数据，存储在Laser中,并计算四向最小距离
           ros::spinOnce();
@@ -301,7 +301,7 @@ int main(int argc, char **argv)
           // //打印
           printf();
           rate.sleep();
-          if (fabs(local_pos.pose.pose.position.x - target_x_mission_3 - init_position_x_take_off) < err_max && fabs(local_pos.pose.pose.position.y - target_x_mission_3 - init_position_y_take_off) < err_max && fabs(local_pos.pose.pose.position.z - ALTITUDE - init_position_z_take_off) < err_max && fabs(yaw - target_yaw) < 0.1)
+          if (fabs(local_pos.pose.pose.position.x - target_x_mission_3 - init_position_x_take_off) < err_max && fabs(local_pos.pose.pose.position.y - target_y_mission_3 - init_position_y_take_off) < err_max && fabs(local_pos.pose.pose.position.z - ALTITUDE - init_position_z_take_off) < err_max && fabs(yaw - target_yaw) < 0.1)
           {
             ROS_INFO("到达目标点，巡航点任务完成");
             mission_num = 4;
