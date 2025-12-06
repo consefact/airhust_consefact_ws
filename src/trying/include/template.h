@@ -213,13 +213,18 @@ bool precision_land()
         precision_land_last_time = ros::Time::now();
 		precision_land_init_position_flag = true;
 	}
+	setpoint_raw.type_mask = /*1 + 2 + 4 +*/ 8 + 16 + 32 +64 + 128 + 256 + 512 /*+ 1024 + 2048*/;
+	setpoint_raw.coordinate_frame = 1;
 	setpoint_raw.position.x = precision_land_init_position_x;
 	setpoint_raw.position.y = precision_land_init_position_y;
 	setpoint_raw.position.z = -0.15;
-	setpoint_raw.type_mask = /*1 + 2 + 4 + 8 + 16 + 32*/ +64 + 128 + 256 + 512 /*+ 1024 + 2048*/;
-	setpoint_raw.coordinate_frame = 1;
     if(ros::Time::now() - precision_land_last_time > ros::Duration(5.0))
-    {
+    {	
+		setpoint_raw.type_mask = 1 + 2 + 4 /*+ 8 + 16 + 32*/ +64 + 128 + 256 + 512 /*+ 1024 + 2048*/;
+		setpoint_raw.coordinate_frame = 1;
+		setpoint_raw.velocity.x = 0;
+		setpoint_raw.velocity.y = 0;
+		setpoint_raw.velocity.z = 0;
         ROS_INFO("Precision landing complete.");
         precision_land_init_position_flag = false; // Reset for next landing
         return true;

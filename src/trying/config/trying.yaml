@@ -4,13 +4,15 @@ if_debug : 1
 ## for colision_avoidance
 ##目标位置
 target_x_mission_2 : 8
-target_y_mission_2 : -2
-target_x_mission_3 : 15
-target_y_mission_3 : 0.5
+target_y_mission_2 : 0
+
+target_x_mission_3 : 16
+target_y_mission_3 : -0.5
 target_yaw : 0
 
 ##追踪部分位置环P
 p_xy : 1.4
+kk_xy : 50
 
 ## 单位:米
 R_outside : 1.0
@@ -37,3 +39,9 @@ vel_sp_max : 0.3
 ## 激光雷达范围设定
 range_min : 0
 range_max : 359
+
+##param for objection detect
+k_xy : 0.001
+error_max_image : 10
+IMAGE_WIDTH : 320
+IMAGE_HEIGHT : 240

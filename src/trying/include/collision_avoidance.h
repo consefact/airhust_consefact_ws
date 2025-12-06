@@ -29,6 +29,7 @@ float distance_cx,distance_cy;                                  //最近障碍�
 float vel_collision[2];                                         //躲避障碍部分速度
 float vel_collision_max;                                        //躲避障碍部分速度限幅
 float p_xy;                                                     //追踪部分位置环P
+float kk_xy;
 float vel_track[2];                                             //追踪部分速度
 float vel_track_max;                                            //追踪部分速度限幅
 int flag_land;                                                  //降落标志位
@@ -195,6 +196,10 @@ void collision_avoidance(float target_x,float target_y)
         for (int i = 0; i < 2; i++)
         {
             vel_collision[i] = satfunc(vel_collision[i],vel_collision_max);
+        }
+
+        if(distance_cx < 0.65 && distance_cx > 0.15){
+            vel_collision[1] += -kk_xy*distance_cy;
         }
     }
 

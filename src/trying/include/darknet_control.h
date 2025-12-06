@@ -6,9 +6,9 @@
 #include <ros/time.h>
 // #include <template.h>
 
-#define IMAGE_WIDTH 320
-#define IMAGE_HEIGHT 240
 
+int IMAGE_WIDTH  = 320;
+int IMAGE_HEIGHT  = 240;
 double k_xy = 0.0005;
 float error_max_image = 5;
 bool bbox_move_flag = false;
